@@ -138,7 +138,6 @@
                 <input type="file" id="file-input" multiple accept=".csv">
             </div>
 
-            <!-- Moved button group above file list -->
             <div class="button-group">
                 <button class="secondary-btn" onclick="clearFiles()">Clear All</button>
                 <button class="primary-btn" onclick="mergeFiles()">Merge CSV Files</button>
@@ -149,6 +148,130 @@
             </div>
         </div>
     </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        let files = [];
+
+        // Fixed event listeners
+        fileInput.addEventListener('change', (e) => {
+            handleFileSelect(e.target.files);
+        });
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            handleFileSelect(e.dataTransfer.files);
+        });
+
+        // Updated file handling
+        function handleFileSelect(selectedFiles) {
+            files = [...files, ...Array.from(selectedFiles)];
+            renderFileList();
+        }
+
+        function renderFileList() {
+            fileList.innerHTML = files.map((file, index) => `
+                <div class="file-item">
+                    <span>${file.name} (${formatFileSize(file.size)})</span>
+                    <button class="secondary-btn" onclick="removeFile(${index})">Remove</button>
+                </div>
+            `).join('');
+        }
+
+        function removeFile(index) {
+            files.splice(index, 1);
+            renderFileList();
+        }
+
+        function clearFiles() {
+            files = [];
+            renderFileList();
+        }
+
+        async function mergeFiles() {
+            if (files.length === 0) {
+                alert('Please select at least one CSV file');
+                return;
+            }
+
+            let mergedContent = '';
+            let headers = null;
+
+            try {
+                for (const file of files) {
+                    const text = await readFile(file);
+                    const lines = text.split(/\r?\n/); // Handle different line endings
+                    
+                    if (lines.length === 0) continue;
+                    
+                    const [header, ...rows] = lines.filter(line => line.trim() !== '');
+
+                    if (!headers) {
+                        headers = header;
+                        mergedContent = header + '\r\n';
+                    }
+
+                    if (header !== headers) {
+                        console.warn(`Header mismatch in ${file.name}. Using first file's headers.`);
+                    }
+
+                    mergedContent += rows.join('\r\n') + '\r\n';
+                }
+
+                if (mergedContent.trim().length === 0) {
+                    throw new Error('No valid CSV data found in files');
+                }
+
+                downloadCSV(mergedContent);
+            } catch (error) {
+                alert(`Error merging files: ${error.message}`);
+            }
+        }
+
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(new Error('Failed to read file'));
+                reader.readAsText(file);
+            });
+        }
+
+        function downloadCSV(content) {
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `merged-${Date.now()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatFileSize(bytes) {
+            if (typeof bytes !== 'number') return '0 Bytes';
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>
 
     <script>
         const dropZone = document.getElementById('drop-zone');
